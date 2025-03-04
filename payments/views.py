@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from .models import Payment
 from .serializers import PaymentSerializer
-from order.models import Order
+from orders.models import Order
 
 class PaymentCreateView(APIView):
     def post(self, request):

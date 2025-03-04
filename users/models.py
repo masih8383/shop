@@ -1,19 +1,14 @@
 import random
-
 from django.db import models
-from django.utils.translation import ugettext_lazy as _
+from django.utils.translation import gettext_lazy as _
 from django.core import validators
 from django.utils import timezone
-from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager, send_mail
-
+from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager, send_mail, Group, Permission
 
 class UserManager(BaseUserManager):
     use_in_migrations = True
 
     def _create_user(self, username, phone_number, email, password, is_staff, is_superuser, **extra_fields):
-        """
-        Creates and saves a User with the given username, email and password.
-        """
         now = timezone.now()
         if not username:
             raise ValueError('The given username must be set')
@@ -47,21 +42,14 @@ class UserManager(BaseUserManager):
     def get_by_phone_number(self, phone_number):
         return self.get(**{'phone_number': phone_number})
 
-
 class User(AbstractBaseUser, PermissionsMixin):
-    """
-    An abstract base class implementing a fully featured User model with
-    admin-compliant permissions.
-
-    Username, password and email are required. Other fields are optional.
-    """
     username = models.CharField(_('username'), max_length=32, unique=True,
                                 help_text=_(
                                     'Required. 30 characters or fewer starting with a letter. Letters, digits and underscore only.'),
                                 validators=[
                                     validators.RegexValidator(r'^[a-zA-Z][a-zA-Z0-9_\.]+$',
-                                                              _('Enter a valid username starting with a-z. '
-                                                                'This value may contain only letters, numbers '
+                                                              _('Enter a valid username starting with a-z. '  
+                                                                'This value may contain only letters, numbers '  
                                                                 'and underscore characters.'), 'invalid'),
                                 ],
                                 error_messages={
@@ -83,10 +71,14 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_staff = models.BooleanField(_('staff status'), default=False,
                                    help_text=_('Designates whether the user can log into this admin site.'))
     is_active = models.BooleanField(_('active'), default=True,
-                                    help_text=_('Designates whether this user should be treated as active. '
+                                    help_text=_('Designates whether this user should be treated as active. '  
                                                 'Unselect this instead of deleting accounts.'))
     date_joined = models.DateTimeField(_('date joined'), default=timezone.now)
     last_seen = models.DateTimeField(_('last seen date'), null=True)
+
+    # اضافه کردن related_name
+    groups = models.ManyToManyField(Group, related_name='custom_user_set', blank=True)
+    user_permissions = models.ManyToManyField(Permission, related_name='custom_user_perm_set', blank=True)
 
     objects = UserManager()
 
@@ -99,29 +91,17 @@ class User(AbstractBaseUser, PermissionsMixin):
         verbose_name_plural = _('users')
 
     def get_full_name(self):
-        """
-        Returns the first_name plus the last_name, with a space in between.
-        """
         full_name = '%s %s' % (self.first_name, self.last_name)
         return full_name.strip()
 
     def get_short_name(self):
-        """
-        Returns the short name for the user.
-        """
         return self.first_name
 
     def email_user(self, subject, message, from_email=None, **kwargs):
-        """
-        Sends an email to this User.
-        """
         send_mail(subject, message, from_email, [self.email], **kwargs)
 
     @property
     def is_loggedin_user(self):
-        """
-        Returns True if user has actually logged in with valid credentials.
-        """
         return self.phone_number is not None or self.email is not None
 
     def save(self, *args, **kwargs):
@@ -129,21 +109,14 @@ class User(AbstractBaseUser, PermissionsMixin):
             self.email = None
         super().save(*args, **kwargs)
 
-
 class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     nick_name = models.CharField(_('nick_name'), max_length=150, blank=True)
     avatar = models.ImageField(_('avatar'), blank=True)
     birthday = models.DateField(_('birthday'), null=True, blank=True)
-    gender = models.NullBooleanField(_('gender'), help_text=_('female is False, male is True, null is unset'))
-    province = models.ForeignKey(verbose_name=_('province'), to='Province', null=True, on_delete=models.SET_NULL)
-    # email = models.EmailField(_('email address'), blank=True)
-    # phone_number = models.BigIntegerField(_('mobile number'), null=True, blank=True,
-    #                                       validators=[
-    #                                           validators.RegexValidator(r'^989[0-3,9]\d{8}$',
-    #                                                                     _('Enter a valid mobile number.'), 'invalid'),
-    #                                       ],
-    #                                       )
+    # تغییر NullBooleanField به BooleanField
+    gender = models.BooleanField(_('gender'), null=True, blank=True, help_text=_('female is False, male is True, null is unset'))
+    province = models.ForeignKey('Province', verbose_name=_('province'), null=True, on_delete=models.SET_NULL)
 
     class Meta:
         db_table = 'user_profiles'
@@ -161,7 +134,6 @@ class UserProfile(models.Model):
     def get_nickname(self):
         return self.nick_name if self.nick_name else self.user.username
 
-
 class Device(models.Model):
     WEB = 1
     IOS = 2
@@ -174,11 +146,6 @@ class Device(models.Model):
 
     user = models.ForeignKey(User, related_name='devices', on_delete=models.CASCADE)
     device_uuid = models.UUIDField(_('Device UUID'), null=True)
-    # notify_token = models.CharField(
-    #     _('Notification Token'), max_length=200, blank=True,
-    #     validators=[validators.RegexValidator(r'([a-z]|[A-z]|[0-9])\w+',
-    #                                           _('Notify token is not valid'), 'invalid')]
-    # )
     last_login = models.DateTimeField(_('last login date'), null=True)
     device_type = models.PositiveSmallIntegerField(choices=DEVICE_TYPE_CHOICES, default=WEB)
     device_os = models.CharField(_('device os'), max_length=20, blank=True)
@@ -191,7 +158,6 @@ class Device(models.Model):
         verbose_name = _('device')
         verbose_name_plural = _('devices')
         unique_together = ('user', 'device_uuid')
-
 
 class Province(models.Model):
     name = models.CharField(max_length=50)
